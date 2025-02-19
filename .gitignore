@@ -1,0 +1,19 @@
+# API keys and secrets
+.env
+
+# Dependency directory
+node_modules
+/uploads
+# Editors
+.idea
+*.iml
+.vscode/settings.json
+.vscode
+.circleci
+/data
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Ignore built ts files
+dist/**/*
