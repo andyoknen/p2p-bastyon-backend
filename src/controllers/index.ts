@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import type { RequestAuth } from 'request'
 import { eq } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
@@ -12,8 +13,8 @@ const paymentDataSchema = z.object({
     .array(
       z.object({
         currency: z.array(z.string()),
-        paymentMethods: z.string(),
-        availableFor: z.array(z.enum(['russia', 'international'])),
+        paymentMethod: z.string(),
+        language: z.string(),
         instructions: z.string(),
       }),
     )
@@ -155,20 +156,20 @@ export async function getNodeInfo(req: Request, res: Response): Promise<void> {
 const orderSchema = z.object({
   id: z.string().uuid().optional(),
   unitPrice: z.number().positive(),
+  fiatPrice: z.number().positive(),
   fiatCurrency: z.string().min(1),
-  label: z.string().min(1),
+  paymentMethod: z.string().min(1),
   currency: z.string().nonempty(),
   status: z.enum(['pending', 'paid', 'canceled']).default('pending'),
 })
 export const addOrder = [
   upload.single('paymentProof'),
-  async (req: Request, res: Response) => {
+  async (req: RequestAuth, res: Response) => {
     try {
       const { paymentId } = req.params
-      const { signature, ...body } = req.body
       const parsedData = {
-        ...body,
-        counterpartyAddress: signature.address,
+        ...req.body,
+        counterpartyAddress: req.address,
         id: uuidv4(),
         unitPrice: Number(req.body.unitPrice),
         currency: req.body.currency,
@@ -299,11 +300,58 @@ export async function getOrderById(req: Request, res: Response) {
 
     res.status(200).json({
       message: 'Order retrieved successfully',
-      order,
+      order: { makerAddress: payment?.[0].address, ...order },
     })
   }
   catch (error) {
     console.error(error)
     res.status(500).json({ message: 'Failed to retrieve order' })
+  }
+}
+
+export async function getOrdersByPaymentId(req: Request, res: Response) {
+  try {
+    const { paymentId } = req.params
+    const page = Number.parseInt(req.query.page as string) || 1
+    const limit = Number.parseInt(req.query.limit as string) || 10
+
+    if (page < 1 || limit < 1) {
+      return res.status(400).json({ message: 'Invalid pagination parameters' })
+    }
+
+    const payment = await db
+      .select()
+      .from(paymentDataTable)
+      .where(eq(paymentDataTable.id, Number(paymentId)))
+      .limit(1)
+
+    if (payment.length === 0) {
+      return res.status(404).json({ message: 'Payment not found' })
+    }
+
+    let existingOrders = JSON.parse(payment[0].orders || '[]')
+
+    const totalOrders = existingOrders.length
+    const totalPages = Math.ceil(totalOrders / limit)
+
+    existingOrders = existingOrders.slice((page - 1) * limit, page * limit)
+
+    res.status(200).json({
+      message: 'Orders retrieved successfully',
+      orders: existingOrders.map((order: any) => ({
+        makerAddress: payment[0].address, // Добавляем адрес мейкера
+        ...order,
+      })),
+      pagination: {
+        page,
+        limit,
+        totalOrders,
+        totalPages,
+      },
+    })
+  }
+  catch (error) {
+    console.error(error)
+    res.status(500).json({ message: 'Failed to retrieve orders' })
   }
 }

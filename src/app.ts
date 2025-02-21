@@ -9,6 +9,7 @@ import { index } from './routes/index'
 // eslint-disable-next-line ts/ban-ts-comment
 // @ts-expect-error
 import cors from 'cors'
+import { uploadDir } from './middlewares/multer'
 
 export const app = express()
 app.use(cors())
@@ -19,6 +20,8 @@ app.use(express.urlencoded({ extended: true }))
 app.set('port', process.env.PORT || 3000)
 
 app.use(logger('dev'))
+
+app.use('/uploads', express.static(uploadDir, {}))
 
 app.use('/', index)
 

@@ -12,7 +12,7 @@ let pocketNetProxyInstance: PocketNetProxyApi = null
  */
 export async function getPocketNetProxyInstance() {
   if (!pocketNetProxyInstance) {
-    pocketNetProxyInstance = await PocketNetProxyApi.create()
+    pocketNetProxyInstance = await PocketNetProxyApi.create('auth/vienn.app')
   }
   return pocketNetProxyInstance
 }
