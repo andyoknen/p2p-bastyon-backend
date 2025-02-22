@@ -203,7 +203,7 @@ export const addOrder = [
         .set({ orders: JSON.stringify(existingOrders) })
         .where(eq(paymentDataTable.id, Number(paymentId)))
 
-      res.status(201).json({ message: 'Order added successfully', order: newOrder })
+      res.status(201).json({ message: 'Order added successfully', order: { ...newOrder, paymentId: payment[0].id } })
     }
     catch (error) {
       console.error(error)
