@@ -7,6 +7,6 @@ WORKDIR /usr/src/app
 COPY . .
 
 ENV DB_FILE_NAME=file:/db/local.db
-RUN npm install && npx drizzle-kit push && npm run build
+RUN npm install && npm run build
 
-ENTRYPOINT [ "/usr/local/bin/node", "server.js" ]
+ENTRYPOINT [ "/usr/src/app/entrypoint.sh" ]
