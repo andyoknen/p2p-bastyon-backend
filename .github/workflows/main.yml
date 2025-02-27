@@ -1,1 +1,18 @@
+name: Deploy Backend
 
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: web1
+    steps:
+      - name: Build docker image
+        run: docker build -t p2p-backend:latest .
+        shell: bash
+      - name: Recreate container
+        run: /data/recreate_p2p_backend.sh
+        shell: bash
+      - name: Clean up
+        run: rm -rf ./*
+        shell: bash
