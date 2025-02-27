@@ -362,6 +362,8 @@ export async function getOrdersByPaymentId(req: Request, res: Response) {
 
     let existingOrders = JSON.parse(payment[0].orders || '[]')
 
+    existingOrders.reverse()
+
     const totalOrders = existingOrders.length
     const totalPages = Math.ceil(totalOrders / limit)
 
