@@ -11,3 +11,4 @@ index.post('/payments/:paymentId/add-order', authMiddleware, controller.addOrder
 index.patch('/payments/:paymentId/orders/:orderId/status', authMiddleware, controller.updateOrderStatus)
 index.get('/payments/:paymentId/orders/:orderId', controller.getOrderById)
 index.get('/payments/:paymentId/orders', controller.getOrdersByPaymentId)
+index.get('/payments/address/me', authMiddleware, controller.getPaymentByAddress)

@@ -8,6 +8,13 @@ import { paymentDataTable } from '../db/schema'
 import { getPocketNetProxyInstance } from '../lib'
 import { upload } from '../middlewares/multer'
 
+function preprocessConvertToNumber(val: any) {
+  if (typeof val === 'string' && !Number.isNaN(Number(val))) {
+    return Number(val)
+  }
+  return val
+}
+
 const paymentDataSchema = z.object({
   details: z
     .array(
@@ -19,21 +26,46 @@ const paymentDataSchema = z.object({
       }),
     )
     .nonempty(),
-  minPkoin: z.number().int().positive(),
-  maxPkoin: z.number().int().positive(),
+  minPkoin: z.number().positive(),
+  maxPkoin: z.number().positive(),
   margin: z.number().positive(),
   telegram: z.string().min(1),
   transferTime: z.string().min(1),
 })
 
-export async function addPayment(req: Request, res: Response): Promise<void> {
+export async function addPayment(req: RequestAuth, res: Response) {
   try {
-    const { signature, ...body } = req.body
+    const { ...body } = req.body
     const validatedData = paymentDataSchema.parse(body)
     const proxyInstance = await getPocketNetProxyInstance()
     const profile = await proxyInstance.rpc.getuserprofile({
-      addresses: [signature.address],
+      addresses: [req.address],
     })
+
+    const existingPayment = await db
+      .select()
+      .from(paymentDataTable)
+      .where(eq(paymentDataTable.address, req.address))
+      .limit(1)
+
+    if (existingPayment.length > 0) {
+      // ✅ Если уже есть платеж, обновляем его
+      await db
+        .update(paymentDataTable)
+        .set({
+          details: JSON.stringify(validatedData.details),
+          minPkoin: validatedData.minPkoin,
+          maxPkoin: validatedData.maxPkoin,
+          margin: validatedData.margin,
+          userName: profile.data[0].name,
+          avatar: profile.data[0].i,
+          telegram: validatedData.telegram,
+          transferTime: validatedData.transferTime,
+        })
+        .where(eq(paymentDataTable.address, req.address))
+
+      return res.status(200).json({ message: 'Payment data updated successfully' })
+    }
 
     await db.insert(paymentDataTable).values({
       details: JSON.stringify(validatedData.details),
@@ -55,9 +87,7 @@ export async function addPayment(req: Request, res: Response): Promise<void> {
     console.error(error)
 
     if (error instanceof z.ZodError) {
-      res
-        .status(400)
-        .json({ message: 'Validation error', errors: error.errors })
+      res.status(400).json({ message: 'Validation error', errors: error.errors })
     }
     else {
       res.status(500).json({ message: 'Internal server error' })
@@ -155,10 +185,11 @@ export async function getNodeInfo(req: Request, res: Response): Promise<void> {
 
 const orderSchema = z.object({
   id: z.string().uuid().optional(),
-  unitPrice: z.number().positive(),
-  fiatPrice: z.number().positive(),
+  unitPrice: z.preprocess(preprocessConvertToNumber, z.number()),
+  fiatPrice: z.preprocess(preprocessConvertToNumber, z.number()),
   fiatCurrency: z.string().min(1),
   paymentMethod: z.string().min(1),
+  counterpartyAddress: z.string().min(1),
   currency: z.string().nonempty(),
   status: z.enum(['pending', 'paid', 'canceled']).default('pending'),
 })
@@ -220,10 +251,10 @@ const statusSchema = z.object({
   status: z.enum(['pending', 'paid', 'canceled']),
 })
 
-export async function updateOrderStatus(req: Request, res: Response) {
+export async function updateOrderStatus(req: RequestAuth, res: Response) {
   try {
     const { paymentId, orderId } = req.params
-    const { signature, ...body } = req.body
+    const { ...body } = req.body
     const { status } = statusSchema.parse(body)
 
     const payment = await db
@@ -236,7 +267,7 @@ export async function updateOrderStatus(req: Request, res: Response) {
       return res.status(404).json({ message: 'Payment not found' })
     }
 
-    if (payment[0].address !== signature.address) {
+    if (payment[0].address !== req.address) {
       return res.status(403).json({ message: 'Not access' })
     }
 
@@ -353,5 +384,40 @@ export async function getOrdersByPaymentId(req: Request, res: Response) {
   catch (error) {
     console.error(error)
     res.status(500).json({ message: 'Failed to retrieve orders' })
+  }
+}
+
+export async function getPaymentByAddress(req: RequestAuth, res: Response) {
+  try {
+    const address = req.address
+
+    if (!address) {
+      return res.status(400).json({ message: 'Address is required' })
+    }
+
+    const payment = await db
+      .select()
+      .from(paymentDataTable)
+      .where(eq(paymentDataTable.address, address))
+      .limit(1)
+
+    if (payment.length === 0) {
+      return res.status(200).json({ message: 'Payment not found', data: null })
+    }
+
+    const paymentDetails = {
+      ...payment[0],
+      details: JSON.parse(payment[0].details),
+      orders: JSON.parse(payment[0].orders),
+    }
+
+    res.status(200).json({
+      message: 'Payment retrieved successfully',
+      data: paymentDetails,
+    })
+  }
+  catch (error) {
+    console.error(error)
+    res.status(500).json({ message: 'Failed to retrieve payment details' })
   }
 }
